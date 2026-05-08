@@ -2490,11 +2490,14 @@ static void readFromIPSocket( n2n_edge_t * eee, SOCKET fd )
     if ( recvlen < 0 )
     {
 #ifdef _WIN32
-        W32_ERROR(WSAGetLastError(), c)
-        traceEvent( TRACE_ERROR, "recvfrom failed with %ls", c );
-        W32_ERROR_FREE(c)
+        int err = WSAGetLastError();
+        if (err != WSAEWOULDBLOCK) {
+            W32_ERROR(err, c)
+            traceEvent( TRACE_DEBUG, "recvfrom failed [%d] %ls", err, c ? c : L"" );
+            W32_ERROR_FREE(c)
+        }
 #else
-        traceEvent(TRACE_ERROR, "recvfrom failed with %s", strerror(errno) );
+        traceEvent(TRACE_DEBUG, "recvfrom failed with %s", strerror(errno) );
 #endif
 
         return; /* failed to receive data from UDP */

@@ -1607,6 +1607,8 @@ static void check_keepalive( n2n_edge_t * eee, time_t now )
                     eee->pending_peers     = scan;
                     scan->punch_start_time = 0;
                     scan->punch_failed     = 0;
+                    scan->punch_retry_count = 0;
+                    scan->punch_reset_time = 0;
                     scan->keepalive_fails  = 0;
                     scan->last_probe_sent  = 0;
                     scan->lan_punch_start  = 0;
@@ -1711,6 +1713,8 @@ void try_send_register( n2n_edge_t * eee,
             scan->punch_start_time = 0;
             scan->punch_failed = 0;
             scan->register_retry_count = 0;
+            scan->punch_retry_count = 0;
+            scan->punch_reset_time = 0;
             scan->lan_punch_start = 0;
             scan->lan_punch_done = 0;
             scan->psp_logged = 0;
@@ -2566,6 +2570,8 @@ static int handle_PACKET( n2n_edge_t * eee,
                 eee->pending_peers = s;
                 s->punch_failed = 0;
                 s->punch_start_time = 0;
+                s->punch_retry_count = 0;
+                s->punch_reset_time = 0;
                 s->lan_punch_done = 0;
                 s->lan_punch_start = 0;
                 s->direct_seen = 0;
@@ -3206,16 +3212,18 @@ static void readFromIPSocket( n2n_edge_t * eee, SOCKET fd )
             if (!do_punch) {
                 if (known) {
                     int addr_changed = 0;
-                    if (pi.sockets[0].family == AF_INET && known->sock.family == AF_INET) {
-                        if (sock_equal(&known->sock, &pi.sockets[0]) != 0) {
-                            addr_changed = 1;
+                    if (known->direct_seen == 0 || (now - known->direct_seen) >= 15) {
+                        if (pi.sockets[0].family == AF_INET) {
+                            if (known->sock.family != AF_INET ||
+                                sock_equal(&known->sock, &pi.sockets[0]) != 0) {
+                                addr_changed = 1;
+                            }
                         }
-                    }
-                    if (!addr_changed &&
-                        (pi.aflags & N2N_AFLAGS_IPV6_SOCKET) && pi.sock6.family == AF_INET6 &&
-                        known->sock6.family == AF_INET6) {
-                        if (sock_equal(&known->sock6, &pi.sock6) != 0) {
-                            addr_changed = 1;
+                        if (!addr_changed && pi.sock6.family == AF_INET6) {
+                            if (known->sock6.family != AF_INET6 ||
+                                sock_equal(&known->sock6, &pi.sock6) != 0) {
+                                addr_changed = 1;
+                            }
                         }
                     }
 
@@ -4205,6 +4213,10 @@ static int scan_route(char* optarg, struct tuntap_config* tuntap_config) {
     if (!tuntap_config->routes)
     {
         tuntap_config->routes = (route*) calloc(16, sizeof(route));
+        if (!tuntap_config->routes) {
+            traceEvent(TRACE_ERROR, "Out of memory for routes");
+            return 0;
+        }
     }
     else if ((tuntap_config->routes_count % 16) == 15)
     {
@@ -4846,12 +4858,16 @@ cleanup:
 #endif
 
     send_deregister( eee, &(eee->supernode));
+    if (eee->supernode_alt.family != 0) {
+        send_deregister( eee, &(eee->supernode_alt));
+    }
 
     /* Notify all known peers */
     {
         struct peer_info *p = eee->known_peers;
         while (p) {
-            send_deregister(eee, &(p->sock));
+            if (p->sock.family != 0)  send_deregister(eee, &(p->sock));
+            if (p->sock6.family != 0) send_deregister(eee, &(p->sock6));
             p = p->next;
         }
     }

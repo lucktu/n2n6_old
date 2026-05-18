@@ -496,7 +496,7 @@ static int setup_encryption(n2n_edge_t *eee, int encrypt_mode, const char *encry
     
     if (encrypt_mode == 2) {
         if (!encrypt_key) {
-            traceEvent(TRACE_WARNING, "No encryption key, using B1");
+            traceEvent(TRACE_WARNING, "No encryption key, data is not encrypted");
             eee->null_transop = 1;
             return 0;
         }
@@ -636,7 +636,7 @@ static int setup_mgmt_socket(n2n_edge_t *eee, int mgmt_port, const char *mgmt_pa
     eee->mgmt_sock = open_socket(mgmt_port, 0 /* bind LOOPBACK*/);
     if (eee->mgmt_sock == -1) {
         if (mgmt_port == N2N_EDGE_MGMT_PORT) {
-            traceEvent(TRACE_WARNING, "Management socket %u already in use, running without management interface",
+            traceEvent(TRACE_WARNING, "Mgmt port %u busy, running without it",
                        (unsigned int)mgmt_port);
             eee->mgmt_sock = -1;
         } else {
@@ -3437,7 +3437,7 @@ static void readFromIPSocket( n2n_edge_t * eee, SOCKET fd )
                                 caps_str = "unknown (old supernode)";
                             traceEvent(TRACE_NORMAL, "Supernode support: %s", caps_str);
                             traceEvent(TRACE_NORMAL, "[OK] edge <<< ======= %s ======= >>> supernode",
-                                       eee->supernode.family == AF_INET6 ? "IPv6" : "IPv4");
+                                       sender.family == AF_INET6 ? "IPv6" : "IPv4");
                             first_ok_message_shown = 1;
                         } else {
                             traceEvent(TRACE_DEBUG, "[OK] edge <<< ======= %s ======= >>> supernode",

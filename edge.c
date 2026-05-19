@@ -4807,7 +4807,9 @@ static int run_loop(n2n_edge_t * eee )
         /* Finished processing select data. */
 
         update_supernode_reg(eee, nowTime);
+        PEERS_LOCK(eee);
         check_punch_timeouts(eee, nowTime);
+        PEERS_UNLOCK(eee);
         
         /* Periodically check if supernode domain resolved to a new address */
         check_supernode_domain_and_update(eee, nowTime);

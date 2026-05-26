@@ -107,12 +107,65 @@ static uint32_t set_static_ip_address(struct tuntap_dev* device) {
     return rc;
 }
 
+static int route_matches_device(const MIB_IPFORWARD_ROW2 *row,
+                                const struct tuntap_dev *device,
+                                const struct route *r) {
+    if (!row || !device || !r)
+        return 0;
+
+    if (memcmp(&row->InterfaceLuid, &device->luid, sizeof(NET_LUID)) != 0)
+        return 0;
+
+    if (row->DestinationPrefix.Prefix.si_family != r->family)
+        return 0;
+
+    if (row->DestinationPrefix.PrefixLength != r->prefixlen)
+        return 0;
+
+    if (row->NextHop.si_family != r->family)
+        return 0;
+
+    if (r->family == AF_INET) {
+        return memcmp(&row->DestinationPrefix.Prefix.Ipv4.sin_addr, r->dest, sizeof(struct in_addr)) == 0 &&
+               memcmp(&row->NextHop.Ipv4.sin_addr, r->gateway, sizeof(struct in_addr)) == 0;
+    }
+
+    if (r->family == AF_INET6) {
+        return memcmp(&row->DestinationPrefix.Prefix.Ipv6.sin6_addr, r->dest, sizeof(struct in6_addr)) == 0 &&
+               memcmp(&row->NextHop.Ipv6.sin6_addr, r->gateway, sizeof(struct in6_addr)) == 0;
+    }
+
+    return 0;
+}
+
+static int route_already_exists(const struct tuntap_dev *device,
+                                const struct route *r) {
+    PMIB_IPFORWARD_TABLE2 table = NULL;
+    int exists = 0;
+
+    if (GetIpForwardTable2(r->family, &table) != NO_ERROR || !table)
+        return 0;
+
+    for (ULONG i = 0; i < table->NumEntries; ++i) {
+        if (route_matches_device(&table->Table[i], device, r)) {
+            exists = 1;
+            break;
+        }
+    }
+
+    FreeMibTable(table);
+    return exists;
+}
+
 static uint32_t set_static_routes(struct tuntap_dev* device) {
     MIB_IPFORWARD_ROW2 route;
-    uint32_t rc = 0;
+    uint32_t rc;
 
     for(int i = 0; i < device->routes_count; i++) {
         struct route* r = &device->routes[i];
+
+        if (route_already_exists(device, r))
+            continue;
 
         InitializeIpForwardEntry(&route);
         memset(&route, 0, sizeof(route));
@@ -121,7 +174,7 @@ static uint32_t set_static_routes(struct tuntap_dev* device) {
             route.DestinationPrefix.Prefix.Ipv4.sin_family = AF_INET;
             memcpy(&route.DestinationPrefix.Prefix.Ipv4.sin_addr, r->dest, sizeof(struct in_addr));
 
-            route.NextHop.Ipv6.sin6_family = AF_INET;
+            route.NextHop.Ipv4.sin_family = AF_INET;
             memcpy(&route.NextHop.Ipv4.sin_addr, r->gateway, sizeof(struct in_addr));
         } else if (r->family == AF_INET6) {
             route.DestinationPrefix.Prefix.Ipv6.sin6_family = AF_INET6;
@@ -135,10 +188,14 @@ static uint32_t set_static_routes(struct tuntap_dev* device) {
         route.ValidLifetime = 0xffffffff;
         route.PreferredLifetime = 0xffffffff;
 
-        rc |= CreateIpForwardEntry2(&route);
+        rc = CreateIpForwardEntry2(&route);
+        if (rc == ERROR_OBJECT_ALREADY_EXISTS)
+            continue;
+        if (rc != NO_ERROR)
+            return rc;
     }
 
-    return rc;
+    return NO_ERROR;
 }
 
 int tuntap_open(struct tuntap_dev *device, struct tuntap_config* config) {

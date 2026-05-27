@@ -5,6 +5,7 @@
 #include "../n2n.h"
 #include "n2n_win32.h"
 
+#include <stdio.h>
 #include <wchar.h>
 
 #ifdef _WIN32
@@ -22,16 +23,17 @@ static void trim_trailing_newlines(wchar_t *message) {
     }
 }
 
-wchar_t *n2n_win32_format_error_inplace(DWORD error_code, wchar_t **system_message, wchar_t *fallback, size_t fallback_len) {
+char *n2n_win32_format_error_inplace(DWORD error_code, wchar_t **system_message, char *fallback, size_t fallback_len) {
     wchar_t *message = NULL;
+    int converted;
 
     if (system_message) {
         *system_message = NULL;
     }
 
     if (fallback && fallback_len > 0) {
-        _snwprintf(fallback, fallback_len, L"Windows error %lu (no system message available)", (unsigned long)error_code);
-        fallback[fallback_len - 1] = L'\0';
+        snprintf(fallback, fallback_len, "Windows error %lu (no system message available)", (unsigned long)error_code);
+        fallback[fallback_len - 1] = '\0';
     }
 
     FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -45,19 +47,19 @@ wchar_t *n2n_win32_format_error_inplace(DWORD error_code, wchar_t **system_messa
     if (message && message[0]) {
         trim_trailing_newlines(message);
         if (message[0]) {
+            converted = WideCharToMultiByte(CP_UTF8, 0, message, -1, fallback, (int)fallback_len, NULL, NULL);
+            if (converted > 0) {
+                fallback[fallback_len - 1] = '\0';
+            }
             if (system_message) {
                 *system_message = message;
             }
-            return message;
+            return fallback;
         }
         LocalFree(message);
     }
 
     return fallback;
-}
-
-const wchar_t *n2n_win32_format_error(DWORD error_code, wchar_t *fallback, size_t fallback_len) {
-    return n2n_win32_format_error_inplace(error_code, NULL, fallback, fallback_len);
 }
 
 /* 1500 bytes payload + 14 bytes ethernet header + 4 bytes VLAN tag */
@@ -71,10 +73,10 @@ void initWin32() {
     if( err != 0 ) {
         /* Tell the user that we could not find a usable */
         /* WinSock DLL.                                  */
-        wchar_t fallback[128];
+        char fallback[256];
         wchar_t *system_error = NULL;
-        const wchar_t *error = n2n_win32_format_error_inplace(GetLastError(), &system_error, fallback, sizeof(fallback) / sizeof(fallback[0]));
-        traceEvent(TRACE_ERROR, "Unable to initialise Winsock 2.x: %ls", error);
+        const char *error = n2n_win32_format_error_inplace(GetLastError(), &system_error, fallback, sizeof(fallback));
+        traceEvent(TRACE_ERROR, "Unable to initialise Winsock 2.x: %s", error);
         if (system_error) {
             LocalFree(system_error);
         }

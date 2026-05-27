@@ -815,13 +815,13 @@ static ssize_t sendto_sock( SOCKET fd, const void * buf, size_t len, const n2n_s
     {
 #ifdef _WIN32
         int error = WSAGetLastError();
-        wchar_t fallback[128];
+        char fallback[256];
         wchar_t *system_error = NULL;
         /* 10014 = WSAEFAULT: IPv6 socket sending to IPv4 address - silent */
         /* 10047 = WSAEAFNOSUPPORT: IPv4 socket sending to IPv6 address - silent */
         if ( error != 10014 && error != 10047 ) {
-            const wchar_t *message = n2n_win32_format_error_inplace(error, &system_error, fallback, sizeof(fallback) / sizeof(fallback[0]));
-            traceEvent( TRACE_ERROR, "sendto failed (%d): %ls", error, message );
+            const char *message = n2n_win32_format_error_inplace(error, &system_error, fallback, sizeof(fallback));
+            traceEvent( TRACE_ERROR, "sendto failed (%d): %s", error, message );
             if (system_error) {
                 LocalFree(system_error);
             }
@@ -2706,10 +2706,10 @@ static void readFromMgmtSocket(n2n_edge_t *eee, int *keep_running) {
     if (recvlen < 0) {
 #ifdef _WIN32
         int err = WSAGetLastError();
-        wchar_t fallback[128];
+        char fallback[256];
         wchar_t *system_error = NULL;
-        const wchar_t *message = n2n_win32_format_error_inplace(err, &system_error, fallback, sizeof(fallback) / sizeof(fallback[0]));
-        traceEvent( TRACE_ERROR, "mgmt recvfrom failed (%d): %ls", err, message );
+        const char *message = n2n_win32_format_error_inplace(err, &system_error, fallback, sizeof(fallback));
+        traceEvent( TRACE_ERROR, "mgmt recvfrom failed (%d): %s", err, message );
         if (system_error) {
             LocalFree(system_error);
         }
@@ -2963,10 +2963,10 @@ static void readFromIPSocket( n2n_edge_t * eee, SOCKET fd )
 #ifdef _WIN32
         int err = WSAGetLastError();
         if (err != WSAEWOULDBLOCK) {
-            wchar_t fallback[128];
+            char fallback[256];
             wchar_t *system_error = NULL;
-            const wchar_t *message = n2n_win32_format_error_inplace(err, &system_error, fallback, sizeof(fallback) / sizeof(fallback[0]));
-            traceEvent( TRACE_DEBUG, "recvfrom failed [%d]: %ls", err, message );
+            const char *message = n2n_win32_format_error_inplace(err, &system_error, fallback, sizeof(fallback));
+            traceEvent( TRACE_DEBUG, "recvfrom failed [%d]: %s", err, message );
             if (system_error) {
                 LocalFree(system_error);
             }

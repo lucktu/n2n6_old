@@ -108,6 +108,9 @@ extern HANDLE event_log;
 #define _SCM_NAME_LENGTH 128
 extern wchar_t scm_name[_SCM_NAME_LENGTH];
 
+wchar_t *n2n_win32_format_error_inplace(DWORD error_code, wchar_t **system_message, wchar_t *fallback, size_t fallback_len);
+const wchar_t *n2n_win32_format_error(DWORD error_code, wchar_t *fallback, size_t fallback_len);
+
 void initWin32();
 
 int scm_startup(wchar_t* name);
